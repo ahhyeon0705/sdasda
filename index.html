@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>퍼스널 컬러 분석</title>
+    <style>
+        /* 배경에 그라데이션 효과 추가 */
+        body {
+            display: flex;
+            justify-content: flex-start; /* 세로축 상단 정렬 */
+            align-items: center;         /* 가로축 중앙 정렬 */
+            flex-direction: column;      /* 요소들을 위에서 아래로 배치 */
+            height: 100vh;               /* 화면 전체 높이 */
+            margin: 0;
+            padding-top: 40px;           /* 상단 여백 */
+            background: linear-gradient(135deg, #ffccff, #ccffff); /* 부드러운 그라데이션 배경 */
+            font-family: Arial, sans-serif; /* 기본 폰트 */
+            color: #333;                 /* 텍스트 색상 */
+            transition: background 0.5s ease-in-out; /* 배경 전환 효과 */
+            overflow: hidden;            /* 별이 화면 밖으로 나가지 않도록 */
+        }
+
+        h1 {
+            color: #9b59b6;              /* 메인 제목 연보라색 */
+            font-size: 28px;             /* 제목 크기 */
+            margin-bottom: 30px;         /* 제목 하단 간격 */
+            animation: fadeIn 1s ease-in; /* 텍스트 등장 애니메이션 */
+        }
+
+        input {
+            padding: 10px;               /* 파일 업로드 버튼 여백 */
+            border: 2px solid #ddd;      /* 경계선 */
+            border-radius: 5px;          /* 둥근 모서리 */
+            margin-bottom: 20px;         /* 간격 */
+            cursor: pointer;             /* 마우스 포인터 */
+            background: linear-gradient(135deg, #ffccf2, #ccffff); /* 부드러운 파스텔톤 그라데이션 */
+            color: #333;                 /* 버튼 텍스트 색상 */
+            transition: transform 0.2s, box-shadow 0.2s; /* 버튼에 클릭 애니메이션 */
+        }
+
+        input:hover {
+            transform: scale(1.05);      /* 버튼을 살짝 확대 */
+            box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1); /* 버튼 그림자 */
+        }
+
+        div, input {
+            margin-bottom: 20px;         /* 요소 간의 간격 */
+        }
+
+        #preview img {
+            max-width: 300px;
+            border: 2px solid #ddd;      /* 이미지 경계선 */
+            border-radius: 10px;         /* 둥근 이미지 */
+            margin-top: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); /* 이미지에 그림자 */
+            transition: opacity 0.5s ease-in; /* 부드러운 이미지 등장 */
+            opacity: 0;
+        }
+
+        #uploadedImage[src] {
+            opacity: 1;                  /* 이미지가 로드되면 등장 */
+        }
+
+        #label-container {
+            margin-top: 20px;
+        }
+
+        .result {
+            font-size: 18px;             /* 결과 폰트 크기 */
+            margin-top: 10px;            /* 결과 텍스트 간격 */
+            color: #9b59b6;              /* 결과 텍스트 연보라색 */
+            animation: fadeIn 1s ease-in-out; /* 텍스트 등장 애니메이션 */
+        }
+
+        /* 텍스트와 이미지 등장 애니메이션 */
+        @keyframes fadeIn {
+            0% {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            100% {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* 반짝이는 별 효과 */
+        .star {
+            position: absolute;
+            width: 2px;
+            height: 2px;
+            background: white;
+            border-radius: 50%;
+            opacity: 0.8;
+            animation: twinkle 2s infinite ease-in-out;
+        }
+
+        @keyframes twinkle {
+            0% { opacity: 0.5; }
+            50% { opacity: 1; }
+            100% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body>
+    <h1>나의 퍼스널 컬러는?</h1>
+    
+    <!-- 이미지 업로드를 위한 파일 입력 필드 -->
+    <input type="file" id="imageInput" accept="image/*">
+    
+    <div id="preview">
+        <!-- 업로드된 이미지를 미리보기로 표시할 이미지 요소 -->
+        <img src="intro.png" id="uploadedImage" alt="Uploaded Image">
+    </div>
+    
+    <!-- 모델의 예측 결과를 표시할 컨테이너 -->
+    <div id="label-container"></div>
+
+    <!-- 반짝이는 별 생성 -->
+    <script>
+        function createStar() {
+            const star = document.createElement('div');
+            star.classList.add('star');
+            star.style.top = `${Math.random() * window.innerHeight}px`;
+            star.style.left = `${Math.random() * window.innerWidth}px`;
+            document.body.appendChild(star);
+
+            setTimeout(() => {
+                star.remove();
+            }, 3000);  // 별이 3초 후에 사라짐
+        }
+
+        // 주기적으로 별 생성
+        setInterval(createStar, 500);  // 0.5초마다 별을 생성
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+    <script type="text/javascript">
+        const URL = "my_model/";
+
+        let model, labelContainer, maxPredictions;
+
+        async function init() {
+            const modelURL = URL + "model.json"; // 모델 정의 파일 경로
+            const metadataURL = URL + "metadata.json"; // 메타데이터 파일 경로
+            
+            try {
+                model = await tmImage.load(modelURL, metadataURL);
+                maxPredictions = model.getTotalClasses(); // 모델 클래스 개수
+                labelContainer = document.getElementById("label-container");
+                for (let i = 0; i < maxPredictions; i++) {
+                    const resultDiv = document.createElement("div");
+                    resultDiv.classList.add("result");
+                    labelContainer.appendChild(resultDiv);
+                }
+            } catch (error) {
+                console.error("Model loading failed:", error);
+            }
+        }
+
+        function handleImageUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const imgElement = document.getElementById("uploadedImage");
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                imgElement.src = e.target.result;
+                imgElement.onload = function () {
+                    predict(imgElement);
+                };
+            };
+            reader.readAsDataURL(file);
+        }
+
+        async function predict(imageElement) {
+            const prediction = await model.predict(imageElement);
+            for (let i = 0; i < maxPredictions; i++) {
+                const classPrediction = prediction[i].className + ": " + (prediction[i].probability * 100).toFixed(2) + "%";
+                labelContainer.childNodes[i].innerHTML = classPrediction;
+            }
+        }
+
+        init();
+        document.getElementById("imageInput").addEventListener("change", handleImageUpload);
+    </script>
+
+</body>
+</html>
